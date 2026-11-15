@@ -23,61 +23,38 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install deps
-        run: npm install --legacy-peer-deps
+      - name: Install Capacitor only
+        run: npm install --no-save --legacy-peer-deps @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
 
-      - name: Build static APK shell
-        run: npx vite build --config vite.apk.config.ts
-
-      - name: Ensure web output
-        id: web
+      - name: Point webDir to public/ide
         run: |
-          if [ -d apk-shell/dist ] && [ -f apk-shell/dist/index.html ]; then
-            echo "dir=apk-shell/dist" >> "$GITHUB_OUTPUT"
-          elif [ -d dist ] && [ -f dist/index.html ]; then
-            echo "dir=dist" >> "$GITHUB_OUTPUT"
-          else
-            echo "No static index.html"
-            find . -name index.html ! -path './node_modules/*' | head -20
-            exit 1
-          fi
+          test -f public/ide/index.html
+          cat > capacitor.config.json << 'JSON'
+          {
+            "appId": "com.lifechange.jupy",
+            "appName": "Jupyter IDE",
+            "webDir": "public/ide"
+          }
+          JSON
+          cat capacitor.config.json
 
-      - name: Capacitor config
-        env:
-          WEB: ${{ steps.web.outputs.dir }}
+      - name: Create Android project
         run: |
-          node -e '
-            const fs = require("fs");
-            let j = {};
-            try { j = JSON.parse(fs.readFileSync("capacitor.config.json","utf8")); } catch {}
-            j.appId = j.appId || "com.lifechange.jupy";
-            j.appName = j.appName || "Jupyter IDE";
-            j.webDir = process.env.WEB;
-            fs.writeFileSync("capacitor.config.json", JSON.stringify(j, null, 2));
-            console.log(j);
-          '
-
-      - name: Add Capacitor Android
-        run: |
-          npm install --no-save --legacy-peer-deps @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
-          npx cap add android || true
+          rm -rf android
+          npx cap add android
           npx cap sync android
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Write local.properties
+      - name: local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
-      - name: Assemble debug APK
+      - name: Assemble APK
         run: |
           cd android
-          if [ -f gradlew ]; then
-            chmod +x gradlew
-            ./gradlew assembleDebug --no-daemon --stacktrace
-          else
-            gradle assembleDebug --no-daemon --stacktrace
-          fi
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
