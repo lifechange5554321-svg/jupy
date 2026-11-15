@@ -14,50 +14,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Install Capacitor only
-        run: npm install --no-save --legacy-peer-deps @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
-
-      - name: Point webDir to public/ide
-        run: |
-          test -f public/ide/index.html
-          cat > capacitor.config.json << 'JSON'
-          {
-            "appId": "com.lifechange.jupy",
-            "appName": "Jupyter IDE",
-            "webDir": "public/ide"
-          }
-          JSON
-          cat capacitor.config.json
-
-      - name: Create Android project
-        run: |
-          rm -rf android
-          npx cap add android
-          npx cap sync android
-
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: local.properties
-        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
-
-      - name: Assemble APK
+      - name: Copy public/ide into android-app assets
         run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          test -f public/ide/index.html
+          test -f android-app/gradlew
+          rm -rf android-app/app/src/main/assets/www
+          mkdir -p android-app/app/src/main/assets/www
+          cp -a public/ide/. android-app/app/src/main/assets/www/
+          echo "sdk.dir=$ANDROID_HOME" > android-app/local.properties
+          chmod +x android-app/gradlew
+          ls android-app/app/src/main/assets/www/
+
+      - name: Assemble debug APK
+        working-directory: android-app
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
           name: jupy-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: android-app/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
