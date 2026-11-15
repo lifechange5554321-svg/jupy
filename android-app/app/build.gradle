@@ -1,20 +1,38 @@
-plugins { id 'com.android.application' }
-android {
-  namespace 'com.lifechange.jupy'
-  compileSdk 35
-  defaultConfig {
-    applicationId "com.lifechange.jupy"
-    minSdk 26
-    targetSdk 35
-    versionCode 94
-    versionName "9.4"
-  }
-  compileOptions {
-    sourceCompatibility JavaVersion.VERSION_17
-    targetCompatibility JavaVersion.VERSION_17
-  }
+plugins {
+    id 'com.android.application'
 }
+
+android {
+    namespace 'com.lifechange.jupy'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.lifechange.jupy"
+        minSdk 26
+        targetSdk 35
+        versionCode 94
+        versionName "9.4"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packaging {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
+}
+
+// Fix: kotlin-stdlib vs kotlin-stdlib-jdk7/jdk8 duplicate classes
+configurations.configureEach {
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+}
+
 dependencies {
-  implementation 'androidx.appcompat:appcompat:1.7.0'
-  implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    // WebView itself is in the Android SDK; androidx.webkit is optional
 }
