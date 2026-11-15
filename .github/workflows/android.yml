@@ -1,0 +1,86 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install deps
+        run: npm install --legacy-peer-deps
+
+      - name: Build static APK shell
+        run: npx vite build --config vite.apk.config.ts
+
+      - name: Ensure web output
+        id: web
+        run: |
+          if [ -d apk-shell/dist ] && [ -f apk-shell/dist/index.html ]; then
+            echo "dir=apk-shell/dist" >> "$GITHUB_OUTPUT"
+          elif [ -d dist ] && [ -f dist/index.html ]; then
+            echo "dir=dist" >> "$GITHUB_OUTPUT"
+          else
+            echo "No static index.html"
+            find . -name index.html ! -path './node_modules/*' | head -20
+            exit 1
+          fi
+
+      - name: Capacitor config
+        env:
+          WEB: ${{ steps.web.outputs.dir }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            let j = {};
+            try { j = JSON.parse(fs.readFileSync("capacitor.config.json","utf8")); } catch {}
+            j.appId = j.appId || "com.lifechange.jupy";
+            j.appName = j.appName || "Jupyter IDE";
+            j.webDir = process.env.WEB;
+            fs.writeFileSync("capacitor.config.json", JSON.stringify(j, null, 2));
+            console.log(j);
+          '
+
+      - name: Add Capacitor Android
+        run: |
+          npm install --no-save --legacy-peer-deps @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          npx cap add android || true
+          npx cap sync android
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Write local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+
+      - name: Assemble debug APK
+        run: |
+          cd android
+          if [ -f gradlew ]; then
+            chmod +x gradlew
+            ./gradlew assembleDebug --no-daemon --stacktrace
+          else
+            gradle assembleDebug --no-daemon --stacktrace
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jupy-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
