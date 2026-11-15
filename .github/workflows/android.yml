@@ -24,10 +24,22 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Install Android SDK (manual)
+        run: |
+          set -e
+          ANDROID_HOME="$HOME/android-sdk"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/cmd.zip
+          unzip -q /tmp/cmd.zip -d "$ANDROID_HOME/cmdline-tools"
+          rm -rf "$ANDROID_HOME/cmdline-tools/latest"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools"
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "sdk.dir=$ANDROID_HOME" > android-app/local.properties
 
-      - name: Prepare assets + wrapper
+      - name: Copy public/ide into assets
         run: |
           set -e
           test -f public/ide/index.html
@@ -35,19 +47,22 @@ jobs:
           rm -rf android-app/app/src/main/assets/www
           mkdir -p android-app/app/src/main/assets/www
           cp -a public/ide/. android-app/app/src/main/assets/www/
-          echo "sdk.dir=$ANDROID_HOME" > android-app/local.properties
-          cd android-app
-          # create missing gradlew on CI
-          gradle wrapper --gradle-version 8.9
-          chmod +x gradlew
-          ls -la gradlew gradle/wrapper/
+          ls -la android-app/app/src/main/assets/www/
 
       - name: Assemble APK
         working-directory: android-app
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: gradle assembleDebug --no-daemon --stacktrace 2>&1 | tee ../build.log
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
         with:
           name: jupy-apk
           path: android-app/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
